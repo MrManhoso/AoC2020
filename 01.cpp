@@ -19,6 +19,7 @@ void get_expense_report(I i)
     while(std::getline(in, line)){
         i = stoi(line);
     }
+    in.close();
 }
 
 // asserts sorted
