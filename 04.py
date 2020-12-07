@@ -93,3 +93,4 @@ def valid_passports(handle):
 # TODO separate running of part1 and 2 better. Note that when looping over handle is single pass only
 handle = open("passports.txt")
 print(valid_passports(handle))
+handle.close()
