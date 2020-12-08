@@ -17,9 +17,10 @@ using std::pair;
 using std::set;
 
 // how many (second) of some other bag color this bag color (first) contains
+// OR how many (second) of bag color (first) that is contained
 using bag_count = pair<string, int>;   
 using bags_count = vector<bag_count>;
-// key: color that is contained by colors in value
+// key: bag/color that is contained by bags/colors in value OR bag/color that contains the bags/colors in value
 // value: bags_count
 using contained_bags = map<string, bags_count>;
 
@@ -61,28 +62,18 @@ void print_map(const contained_bags& inverted_rules)
 }
 
 vector<string> split(const std::string& str, char delim = ' ')
-{
-    // print("split 1");
-    
+{ 
     std::stringstream ss(str);
     std::string token;
     vector<string> ret;
     while (std::getline(ss, token, delim)) {
-        // print(token);
-
         if(token.size() == 0) continue;
         auto found = token.find_first_not_of(" ");
-        // print(found);
         if(found != string::npos) token = token.substr(found);
         found = token.find(" bag");
         if(found != string::npos) token = token.substr(0, found);
         ret.emplace_back(token);
-        
-        // print("split while last line");
     }
-    
-    // print("split 2");
-
     return std::move(ret);
 }
 
@@ -101,19 +92,10 @@ vector<string> get_rules(const string& input)
     return std::move(vec);
 }
 
-// not really a bags_count as described above, just a vec of colors and how many of it 
 bags_count get_contained_colors(const string& contained_colors)
 {
-    // print(contained_colors);
-
-    if(contained_colors == "no other bags.") return bags_count{{"", 0}};
-
-    // print("get_contained_colors 2");
-
+    if(contained_colors == "no other bags.") return bags_count();
     auto nrs_and_cols(split(contained_colors, ','));
-
-    // print(print_container(nrs_and_cols));
-
     bags_count ret; 
     for(const auto nr_and_col : nrs_and_cols){
         auto found = nr_and_col.find_first_of(' ');
@@ -121,91 +103,94 @@ bags_count get_contained_colors(const string& contained_colors)
         auto color = nr_and_col.substr(found+1);
         ret.emplace_back(std::make_pair(color, nr));
     }
-
-    // print(print_container(ret));
-    
     return std::move(ret);
 }
 
-contained_bags map_rule(contained_bags& curr, const string& rule)
+pair<string, size_t> get_containing_color(const string& rule)
 {
-    // print("map_rule 1");
-
     static const string to_find(" bags contain ");
     auto found = rule.find(to_find);
-    if(found == string::npos) return curr;
-    
-    // print("map_rule 2");
-
+    if(found == string::npos) return std::make_pair(string(), found);
     auto containing_color(rule.substr(0, found));
     found += to_find.size();
-    auto contained_colors(get_contained_colors(rule.substr(found)));
-    
-    // print(print_container(contained_colors));
-
-    auto it = std::remove_if(std::begin(contained_colors), std::end(contained_colors), [](const bag_count& bc){ return bc.second == 0; });
-    contained_colors.erase(it, std::end(contained_colors));
-    
-    // print("----------------------------------");
-    // print(print_container(contained_colors));
-    
-    for(const auto& cc : contained_colors){
-        // auto v = curr[cc.first];
-        curr[cc.first].push_back(std::make_pair(containing_color, cc.second));
-        // print(print_container(curr[cc.first]));
-    }
-
-    // print("map_rule 3");
-    
-    return curr;
+    return std::make_pair(containing_color, found);
 }
 
-contained_bags map_rules_to_bagcolors(const vector<string>& rules)
+void invert_rule_and_map(const string& containing_color, const bags_count& contained_colors, contained_bags& mapped)
 {
-    // first: color that can be contained by second
-    // second: vector of colors that should contain first + how many of first
-    map<string, vector<string>> ret;
+    for(const auto& cc : contained_colors){
+        mapped[cc.first].push_back(std::make_pair(containing_color, cc.second));
+    }   
+}
 
-    // print("map_rules_to_bagcolors 1");
-    
-    return std::accumulate(std::cbegin(rules), std::cend(rules), contained_bags(), [](contained_bags curr, const std::string& rule){
-        return map_rule(curr, rule);
+void map_containing_to_contained(const string& containing_color, const bags_count& contained_colors, contained_bags& mapped) 
+{ 
+    mapped[containing_color] = contained_colors; 
+}
+
+template<typename F>
+contained_bags map_rule(contained_bags& curr, const string& rule, F mapper)
+{
+    auto cont_col = get_containing_color(rule);
+    if(cont_col.first == "") return std::move(curr);
+    auto contained_colors(get_contained_colors(rule.substr(cont_col.second)));
+    // auto it = std::remove_if(std::begin(contained_colors), std::end(contained_colors), [](const bag_count& bc){ return bc.second == 0; });
+    // contained_colors.erase(it, std::end(contained_colors));
+    mapper(cont_col.first, contained_colors, curr);   
+    return std::move(curr);
+}
+
+// first: color that can be contained by second
+// second: vector of colors that should contain first + how many of first
+template<typename F>
+contained_bags map_rules(const vector<string>& rules, F mapper)
+{
+    return std::accumulate(std::cbegin(rules), std::cend(rules), contained_bags(), [=](contained_bags curr, const std::string& rule){
+        return map_rule(curr, rule, mapper);
     });
 }
 
-set<string> bagcolors_for(const string& bag_to_contain, const contained_bags& inverted_rules)
+set<string> bagcolors_containing_bag(const string& bag_to_contain, const contained_bags& inverted_rules)
 {
-    // print("bagcolors_for 1");
-    // TODO traveser map starting with bag_to_contain, could prob be done recursively
     set<string> ret;
     auto it_cols = inverted_rules.find(bag_to_contain);
     if(it_cols == std::cend(inverted_rules)) return ret;
-
-    // print("bagcolors_for 2");
-    
     for(const auto col : (*it_cols).second){
-        auto s = bagcolors_for(col.first, inverted_rules);
-
-        // print(print_container(s));
-
+        auto s = bagcolors_containing_bag(col.first, inverted_rules);
         std::set_union(std::cbegin(ret), std::cend(ret), std::cbegin(s), std::cend(s), std::inserter(ret, std::end(ret)));
         ret.insert(col.first);
     }
-    
-    // print("bagcolors_for 3");
-
     return ret;
 }
 
 int nr_bagcolors_for(const string& bag_to_contain, const contained_bags& inverted_rules)
 {
-    // print_map(inverted_rules);
-    return bagcolors_for(bag_to_contain, inverted_rules).size();
+    return bagcolors_containing_bag(bag_to_contain, inverted_rules).size();
+}
+
+// includes given color as one
+long long sum_nr_bags(const string& color, const contained_bags& mapped_rules, bool include_current)
+{
+    auto it = mapped_rules.find(color);
+    if(it == std::cend(mapped_rules)) return 0;
+    auto mapped_rule = *it;
+
+    return std::accumulate(std::cbegin(mapped_rule.second), std::cend(mapped_rule.second), include_current ? 1 : 0, [&](int curr, const pair<string,int>& c){
+        return curr + c.second * sum_nr_bags(c.first, mapped_rules, true);
+    });
+}
+
+// excludes given start color
+long long nr_bags_inside_bag(const string& color, const contained_bags& mapped_rules)
+{
+    return sum_nr_bags(color, mapped_rules, false);
 }
 
 int main()
 {
     auto rules(get_rules("bagrules.txt"));
-    std::cout << "Part 1: " << nr_bagcolors_for("shiny gold", map_rules_to_bagcolors(rules)) << '\n';
+    // expects 246 for "production" run
+    // std::cout << "Part 1: " << nr_bagcolors_for("shiny gold", map_rules(rules, invert_rule_and_map)) << '\n';
+    std::cout << "Part 2: " << nr_bags_inside_bag("shiny gold", map_rules(rules, map_containing_to_contained)) << '\n';
     return 0;
 }
