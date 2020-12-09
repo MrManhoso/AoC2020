@@ -5,10 +5,14 @@
 #include <array>
 #include <algorithm>
 #include <numeric>
+#include <cassert>
+#include <utility>
+#include <iterator>
 
 using std::vector;
 using std::string;
 using std::array;
+using std::pair;
 
 ///////////////////////////////////////////////////
 template<typename T>
@@ -74,15 +78,16 @@ bool not_valid(long long val, const vector<long long>& sorted_previous)
     return true;
 }
 
-long long find_first_invalid(const vector<long long>& input, int size)
+int find_first_invalid(const vector<long long>& input, int size)
 {
     // maybe use list since we will do alot of insert/delete?
-    vector<long long> sorted_previous(std::cbegin(input), std::cbegin(input) + size);
+    vector<long long> sorted_previous;
+    sorted_previous.assign(std::cbegin(input), std::cbegin(input) + size);
     std::sort(std::begin(sorted_previous), std::end(sorted_previous));
     int index = size;
     while(index < input.size()){
         auto val = input[index];
-        if(not_valid(val, sorted_previous)) return val;
+        if(not_valid(val, sorted_previous)) return index;
         update_previous(val, input[index-size], sorted_previous);
         ++index;
     }
@@ -100,10 +105,43 @@ vector<long long> read_input(const string& file)
     return std::move(ret);
 }
 
+// asserts [s,e)
+long long min_max_sum(int start, int end, const vector<long long>& input)
+{
+    auto s = std::begin(input);
+    std::advance(s, start);
+    auto e = std::begin(input);
+    std::advance(e, end);
+    auto mm = std::minmax_element(s, e);
+    return *mm.first + *mm.second;
+}
+
+long long encryption_weakness(long long val, const vector<long long>& input)
+{
+    vector<long long> part_sum;
+    std::partial_sum(std::begin(input), std::end(input), std::back_inserter(part_sum));
+    int i = 0;
+    auto f = std::lower_bound(std::cbegin(part_sum), std::cend(part_sum), val);
+    auto greater_than = std::distance(std::cbegin(part_sum), f);
+    if(part_sum[greater_than] == val) return min_max_sum(i, greater_than+1, input); //input[i] + input[greater_than];
+    while(i < part_sum.size()-1){
+        // todo kolla så inte i+1 == greater_than
+        auto diff = part_sum[greater_than] - part_sum[i];
+        if(diff == val) return min_max_sum(i+1, greater_than+1, input);
+        if(diff < val) ++greater_than;
+        else ++i;
+        assert(i+1 < greater_than);
+    }
+    return -1;
+}
+
 int main()
 {
     auto file("xmas.txt");
     auto input = read_input(file);
-    std::cout << "Part 1: " << find_first_invalid(input, file == "xmas_test.txt" ? 5 : 25) << '\n';
+    // correct for part 1 is 22406676
+    auto i = find_first_invalid(input, file == "xmas_test.txt" ? 5 : 25);
+    std::cout << "Part 1: " << input[i] << '\n';
+    std::cout << "Part 2: " << encryption_weakness(input[i], input) << '\n';
     return 0;
 }
