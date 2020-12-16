@@ -27,6 +27,8 @@ Action R means to rotate the waypoint around the ship right (clockwise) the give
 Action F means to move forward to the waypoint a number of times equal to the given value.
 
  */
+
+// TODO: move action to separate interface with functions turn, move (forward), position (according to specified direction)
 public class Twelve {
     private enum Direction{
         N(0), E(1), S(2), W(3), F(4);
@@ -46,17 +48,49 @@ public class Twelve {
         Turn, Move
     }
 
+    private static void print(int[] a){
+        Arrays.stream(a).forEach(i -> System.out.print(String.valueOf(i) + " "));
+        System.out.println("");
+    }
+
     private class WayPoint{
         private int[] _pos = new int[]{1, 10, 0, 0};
-        public int getNorth(){ return _pos[Direction.N.getValue()]; }
-        public int getEast(){ return _pos[Direction.E.getValue()]; }
-        public int getSouth(){ return _pos[Direction.S.getValue()]; }
-        public int getWest(){ return _pos[Direction.W.getValue()]; }
+        private int _rotation = 0;
+
+        private int getDirIndex(Direction dir){ return (4 + dir.getValue() - getRotationOffset()) % 4; }
+        private int getDirValue(Direction dir){ return _pos[getDirIndex(dir)]; }
+
+        private int zeroOrPos(int v){
+            return v > 0 ? v : 0;
+        }
+        private int zeroOrAbs(int v){
+            return v < 0 ? Math.abs(v) : 0;
+        }
+        public int[] getRelativePositions(){
+            int ns = getDirValue(Direction.N) - getDirValue(Direction.S);
+            int ew = getDirValue(Direction.E) - getDirValue(Direction.W);
+            return new int[]{zeroOrPos(ns), zeroOrPos(ew), zeroOrAbs(ns), zeroOrAbs(ew) };
+        }
+
+        private int getRotationOffset(){
+            return (_rotation / 90) % 4;
+        }
+
+        public WayPoint position(Direction dir, int steps){
+            _pos[getDirIndex(dir)] += steps;
+            return this;
+        }
+
+        public WayPoint turn(Rotation rot, int degrees){
+            _rotation += rot == Rotation.R ? degrees : 360 - degrees;
+            return this;
+        }
     }
 
     // north, east, south, west
     private int[] _moves = new int[]{0,0,0,0};
     private int _rotation = 90; // east
+    private WayPoint _waypoint = null; //new WayPoint();
 
     public static String[] readFile(String filePath){
         try {
@@ -80,7 +114,7 @@ public class Twelve {
     }
 
     private void doMove(Direction dir, int steps){
-        int index = dir == Direction.F ? getCurrentDirection(): dir.getValue();
+        int index = dir == Direction.F ? getCurrentDirection() : dir.getValue();
         _moves[index] += steps;
     }
 
@@ -93,10 +127,23 @@ public class Twelve {
     }
 
     private void turn(String dir, int degrees){
-        doTurn(Enum.valueOf(Rotation.class, dir), degrees);
+        if(_waypoint == null) doTurn(Enum.valueOf(Rotation.class, dir), degrees);
+        else _waypoint.turn(Enum.valueOf(Rotation.class, dir), degrees);
     }
+
     private void move(String dir, int steps){
-        doMove(Enum.valueOf(Direction.class, dir), steps);
+        Direction d = Enum.valueOf(Direction.class, dir);
+        if(_waypoint == null) doMove(Enum.valueOf(Direction.class, dir), steps);
+        else {
+            if(d != Direction.F) _waypoint.position(d, steps);
+            else {
+                int[] relPos = _waypoint.getRelativePositions();
+                _moves[Direction.N.getValue()] += relPos[Direction.N.getValue()] * steps;
+                _moves[Direction.E.getValue()] += relPos[Direction.E.getValue()] * steps;
+                _moves[Direction.S.getValue()] += relPos[Direction.S.getValue()] * steps;
+                _moves[Direction.W.getValue()] += relPos[Direction.W.getValue()] * steps;
+            }
+        }
     }
 
     private void act(String action){
@@ -114,20 +161,32 @@ public class Twelve {
         }
     }
 
-    // What is the Manhattan distance between that location and the ship's starting position?
-    // Manhattan distance (sum of the absolute values of its east/west position and its north/south position)
-    // correct answer is 1482
-    private void part1(String[] instructions){
-        Arrays.stream(instructions).forEach(s -> act(s));
+    private int manhattanDistance(){
         int ew = Math.abs(_moves[Direction.E.getValue()] - _moves[Direction.W.getValue()]);
         int ns = Math.abs(_moves[Direction.N.getValue()] - _moves[Direction.S.getValue()]);
-        System.out.println("Part 1: " + String.valueOf(ew + ns));
+        return ew + ns;
+    }
+
+    private void execute(String[] instructions){
+        Arrays.stream(instructions).forEach(s -> act(s));
+    }
+
+    // What is the Manhattan distance between that location and the ship's starting position?
+    // Manhattan distance (sum of the absolute values of its east/west position and its north/south position)
+    // correct answer is 1482 (25 for test)
+    private void part1(String[] instructions){
+        execute(instructions);
+        System.out.println("Part 1: " + String.valueOf(manhattanDistance()));
     }
 
     // The waypoint starts 10 units east and 1 unit north relative to the ship. The waypoint is relative to the ship; that is, if the ship moves, the waypoint moves with it
     // What is the Manhattan distance between that location and the ship's starting position?
+    // correct answer is ? (286 for test)
     private void part2(String[] instructions){
-
+        _waypoint = new WayPoint();
+        _moves = new int[]{0,0,0,0};
+        execute(instructions);
+        System.out.println("Part 2: " + String.valueOf(manhattanDistance()));
     }
 
     public static void main(String[] args) {
@@ -135,5 +194,6 @@ public class Twelve {
         String[] lines = readFile(file);
         Twelve twelve = new Twelve();
         twelve.part1(lines);
+        twelve.part2(lines);
     }
 }
