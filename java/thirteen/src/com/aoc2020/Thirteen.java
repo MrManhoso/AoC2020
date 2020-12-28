@@ -2,10 +2,8 @@ package com.aoc2020;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.lang.reflect.Array;
 import java.util.*;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 public class Thirteen {
     public static String[] readFile(String filePath){
@@ -49,64 +47,31 @@ public class Thirteen {
         System.out.println("Part 1: " + String.valueOf(idAndWaitTime[0] * idAndWaitTime[1]));
     }
 
-    public static Set<Integer> getPrimeFactors(int n){
-        Set<Integer> ret = new HashSet<Integer>();
-        while(n%2 == 0){
-            ret.add(2);
-            n /= 2;
-        }
-        for(int i = 3; i <= Math.sqrt(n); i = i+2){
-            while(n%i == 0){
-                ret.add(i);
-                n /= i;
-            }
-        }
-        if(n > 2){
-            ret.add(n);
-        }
-        return ret;
+    //-------------------------------------------------------------
+
+    // a1: remainder, n1 departure,
+    // returns: first is result, second is next modulo
+    public long[] sieve(long a1, long n1, long n2, long congruentTo){
+        int i = 0;
+        while((a1 + (n1 * i)) % n2 != congruentTo) ++i;
+        return new long[]{a1 + (n1 * i), n1*n2};
     }
 
-    // eulers fi function
-    public static int fi(int n){
-        Set<Integer> primes = getPrimeFactors(n);
-        return primes.stream().reduce(n, (curr, p) -> curr-(curr/p));
-    }
-
-    public static int calculateB(long bigN, int n){
-        int b = (int) (Math.pow(bigN/n, fi(n)-1) % n);
-        return b;
-    }
-
-    public static long getMinX(long x, long bigN){
-        while(x >= bigN) x -= bigN;
-        return x;
-    }
-
-    // ai = rest of t mod ni, N = n1 * n2 * ... * ni
-    public static long sumPart(int a, int b, long bigN, int n){
-        long c = bigN/n;
-        return a*b*c;
-    }
-
-    // "Kinesiska restklassatsen"
-    // x = sum(ai*bi(N/ni)
-    // ai = rest of t mod ni which in this case also is ni-x where x is position in array of departures
+    // chineese remainder theorem using sieve (quadratic->slow)
     public long getEarliestTimestamp(int[] departures){
-        long bigN = Arrays.stream(departures)
-                .filter(i -> i > -1)
-//                .skip(1)
-                .mapToLong(x -> x)
-                .reduce(1L, Math::multiplyExact);
-        long x = IntStream.range(0,departures.length)
+        long[][] x = IntStream.range(0,departures.length)
                 .filter(i -> departures[i] != -1)
-                .mapToObj(i -> new int[]{departures[i]-i, departures[i]})
-                .reduce(0L, (tot, d) -> tot + sumPart(d[0], calculateB(bigN, d[1]), bigN, d[1]), Long::sum);
-        return getMinX(x, bigN);
+                .mapToObj(i -> new long[]{departures[i]-i, departures[i]})// first is remainder, second is departure time
+                .sorted((i1, i2) -> i1[1] < i2[1] ? -1 : i1[1] == i2[1] ? 0 : 1)
+                .toArray(n -> new long[n][2]);
+        return Arrays.stream(x)
+                .skip(1)
+                .reduce(x[0], (b, d) -> sieve(b[0], b[1], d[1], d[0] % d[1]))[0];
+
     }
 
     // What is the earliest timestamp such that all of the listed bus IDs depart at offsets matching their positions in the list?
-    // use "kinesiska restklassatsen"? We at least know departures are coprime (I checked)
+    // use "chineese remainder theorem"? We at least know departures are coprime (I checked)
     private void part2(int[] departures){
         System.out.println("Part 2: " + getEarliestTimestamp(departures));
     }
